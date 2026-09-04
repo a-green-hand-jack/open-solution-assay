@@ -21,7 +21,16 @@ export async function validatePhase(workspace: string, phase: Phase, cap: TierCa
       continue;
     }
     const content = await readFile(path, "utf8");
-    checks.push({ name: `${relative}:non-empty`, passed: content.trim().length > 40, detail: `${content.length} bytes` });
+    if (relative.endsWith(".json")) {
+      // A JSON artifact may be legitimately empty: a deliverable with no
+      // runnable command produces `[]`, which is a finding about the
+      // deliverable, not a failure of the phase. Require valid JSON instead.
+      let parsed = true;
+      try { JSON.parse(content); } catch { parsed = false; }
+      checks.push({ name: `${relative}:valid-json`, passed: parsed, detail: parsed ? `${content.length} bytes` : "not parseable" });
+    } else {
+      checks.push({ name: `${relative}:non-empty`, passed: content.trim().length > 40, detail: `${content.length} bytes` });
+    }
     if (relative.endsWith(".md") && !isDeterministic(phase)) {
       for (const section of ARTIFACT_SECTIONS) {
         checks.push({ name: `${relative}:${section}`, passed: content.includes(section), detail: content.includes(section) ? "present" : "missing" });
