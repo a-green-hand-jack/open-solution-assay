@@ -30,11 +30,18 @@ RUN curl -fsSL "https://raw.githubusercontent.com/a-green-hand-jack/open-scholar
 RUN pip3 install --no-cache-dir --break-system-packages \
         numpy scipy "networkx==3.6.1" pytest sympy
 
-# OSA 资产。dev loop 下会被 bind-mount 覆盖，见 entrypoint。
-WORKDIR /src/osa
-COPY prompts/ /opt/osa/prompts/
+# OSA 本体：TS CLI，从源码构建并全局安装为 `osa`。
+# dev loop 下 bind-mount /src/osa 覆盖源码后由 entrypoint 增量重建。
+WORKDIR /opt/osa
+COPY package.json tsconfig.json ./
+RUN npm install --ignore-scripts
+COPY src/ ./src/
+COPY prompts/ ./prompts/
+RUN npm run build && chmod +x dist/cli.js && npm link
+
 COPY docker/entrypoint.sh /usr/local/bin/osa-entrypoint
 RUN chmod +x /usr/local/bin/osa-entrypoint
+WORKDIR /src/osa
 
 # 被审对象只读挂载于此；产出落 /runs
 VOLUME ["/data/tasks", "/runs"]

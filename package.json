@@ -1,0 +1,28 @@
+{
+  "name": "open-solution-assay",
+  "version": "0.1.0",
+  "description": "Locates the scientific problem a solution repository was built to solve, independently establishes how far it actually got, and quantifies the shortfall.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "osa": "./dist/cli.js",
+    "open-solution-assay": "./dist/cli.js"
+  },
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepare": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "^1.18.11",
+    "commander": "^12.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}
