@@ -11,6 +11,11 @@ import { RunStateSchema, type RunState, type TierCap } from "./state.js";
 import { validatePhase, type Check } from "./validation.js";
 import { abortSession, attachTui, createSession, prompt, startOpenCode, waitForIdle, type OpenCodeRuntime } from "./opencode.js";
 
+/** Progress is printed to stderr so stdout stays clean for machine consumers. */
+function report(line: string): void {
+  process.stderr.write(`${line}\n`);
+}
+
 export type ControllerOptions = {
   workspace: string;
   headless: boolean;
@@ -127,6 +132,8 @@ export class AssayController {
     };
     await this.save(state);
 
+    const started = Date.now();
+    report(`  → ${phase}${isDeterministic(phase) ? "" : " (model)"}`);
     try {
       if (isDeterministic(phase)) await this.runDeterministic(phase);
       else await this.runJudgment(phase, signal);
@@ -138,6 +145,7 @@ export class AssayController {
       // One remediation round for judgment phases; a deterministic phase that
       // fails its own contract is a bug in this package, not a model error.
       if (failed.length > 0 && !isDeterministic(phase)) {
+        report(`    ! ${failed.length} check(s) failed, remediating: ${failed.slice(0, 3).map((c) => c.name).join(", ")}`);
         await this.remediate(phase, failed, signal);
         checks = await validatePhase(this.options.workspace, phase, cap);
         failed = checks.filter((check) => !check.passed);
@@ -153,7 +161,9 @@ export class AssayController {
       };
       current.status = "prepared";
       await this.save(current);
+      report(`  ✓ ${phase} (${checks.length} checks, ${Math.round((Date.now() - started) / 1000)}s)`);
     } catch (error) {
+      report(`  ✗ ${phase}: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`);
       const failedState = await this.state();
       failedState.phases[phase] = {
         ...failedState.phases[phase]!,
