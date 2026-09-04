@@ -16,7 +16,12 @@ const run = promisify(execFile);
 const VERSION = "0.1.0";
 
 async function which(binary: string, args: string[] = ["--version"]): Promise<string | null> {
-  try { return (await run(binary, args)).stdout.trim().split("\n")[0] ?? ""; } catch { return null; }
+  try {
+    const { stdout, stderr } = await run(binary, args);
+    // Some tools (pdftotext) print their version banner to stderr.
+    const line = (stdout.trim() || stderr.trim()).split("\n")[0]?.trim();
+    return line && line.length > 0 ? line : "present";
+  } catch { return null; }
 }
 
 const program = new Command();
