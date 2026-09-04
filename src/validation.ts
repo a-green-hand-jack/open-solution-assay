@@ -6,10 +6,47 @@ import type { TierCap } from "./state.js";
 
 export type Check = { name: string; passed: boolean; detail: string };
 
-const CEILING_RANK: Record<string, number> = {
-  closed: 0, "declared-partial": 1, narrowed: 2, unsupported: 3,
-  unverifiable: 4, contradicted: 5, misaligned: 6, unauditable: 7,
-};
+/**
+ * Literal fragments of the report skeleton. The failure mode is a model
+ * copying the skeleton instead of filling it in.
+ *
+ * A bare `{{`/`}}` is deliberately not a signal: OSA's own prompts use angle
+ * brackets, never mustache, and nested LaTeX such as
+ * `\varepsilon^{3^{-d-2}}` produces `}}` legitimately.
+ */
+const SKELETON_FRAGMENTS: readonly string[] = [
+  "<problem id / repo>",
+  "<m>/<n>",
+  "<T0-T4>",
+  "closed | declared-partial",
+  "<the band's wording",
+  "<criterion label>",
+  "<what must change>",
+];
+const MUSTACHE = /\{\{\s*[A-Za-z_][A-Za-z0-9_ .-]{2,60}\s*\}\}/;
+
+export function unresolvedPlaceholder(content: string): string | null {
+  for (const fragment of SKELETON_FRAGMENTS) if (content.includes(fragment)) return fragment;
+  const mustache = MUSTACHE.exec(content);
+  return mustache ? mustache[0] : null;
+}
+
+/**
+ * The tier cap constrains how strongly a run may assert that the problem was
+ * resolved. It is not a single severity ladder: `declared-partial` is not a
+ * weaker `narrowed`, it is a different finding — an honestly scoped partial
+ * result with verified support. Ranking them forced an honest partial
+ * submission down to `narrowed`, which reads worse than the truth.
+ *
+ * Only `closed` asserts full resolution, so only `closed` is gated by the
+ * tier. T4 recovered no problem at all, so nothing but `unauditable` is
+ * sayable.
+ */
+function forbiddenLabels(tier: TierCap["tier"]): readonly string[] {
+  if (tier === "T4") return RESOLUTION_LABELS.filter((label) => label !== "unauditable");
+  if (tier === "T0" || tier === "T1") return [];
+  return ["closed"];
+}
 
 /** Every artifact a phase is contracted to write must exist and be non-trivial. */
 export async function validatePhase(workspace: string, phase: Phase, cap: TierCap | null): Promise<Check[]> {
@@ -36,8 +73,9 @@ export async function validatePhase(workspace: string, phase: Phase, cap: TierCa
         checks.push({ name: `${relative}:${section}`, passed: content.includes(section), detail: content.includes(section) ? "present" : "missing" });
       }
     }
-    if (content.includes("{{") || content.includes("}}")) {
-      checks.push({ name: `${relative}:template`, passed: false, detail: "unresolved template placeholder" });
+    const placeholder = unresolvedPlaceholder(content);
+    if (placeholder) {
+      checks.push({ name: `${relative}:template`, passed: false, detail: `unresolved template placeholder: ${placeholder}` });
     }
   }
   if (phase === "report") checks.push(...await exportGate(workspace, cap));
@@ -74,8 +112,14 @@ export async function exportGate(workspace: string, cap: TierCap | null): Promis
 
   // G6: the tier ceiling must not be exceeded.
   if (cap && validLabel) {
-    const within = (CEILING_RANK[label] ?? 99) >= (CEILING_RANK[cap.resolution_ceiling] ?? 0);
-    checks.push({ name: "gate:tier-ceiling", passed: within, detail: within ? `${label} is within ${cap.tier} ceiling ${cap.resolution_ceiling}` : `${label} exceeds ${cap.tier} ceiling ${cap.resolution_ceiling}` });
+    const forbidden = forbiddenLabels(cap.tier);
+    const within = !forbidden.includes(label);
+    checks.push({
+      name: "gate:tier-ceiling", passed: within,
+      detail: within
+        ? `${label} is permitted at ${cap.tier}`
+        : `${cap.tier} forbids ${forbidden.join(", ")}; got ${label}`,
+    });
   }
 
   // G2/G3: one evidenced row per dimension; any score <= 2 forces a condition.

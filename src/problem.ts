@@ -26,7 +26,9 @@ const STATEMENT_PATTERNS: readonly RegExp[] = [
 const CEILINGS: Record<TierCap["tier"], Pick<TierCap, "resolution_ceiling" | "scope_coverage_ceiling">> = {
   T0: { resolution_ceiling: "closed", scope_coverage_ceiling: 5 },
   T1: { resolution_ceiling: "closed", scope_coverage_ceiling: 5 },
-  T2: { resolution_ceiling: "narrowed", scope_coverage_ceiling: 3 },
+  // T2 and T3 forbid only `closed`; they differ in how far scope-coverage may
+  // reach, not in which verdicts are sayable.
+  T2: { resolution_ceiling: "declared-partial", scope_coverage_ceiling: 3 },
   T3: { resolution_ceiling: "declared-partial", scope_coverage_ceiling: 2 },
   T4: { resolution_ceiling: "unauditable", scope_coverage_ceiling: 0 },
 };

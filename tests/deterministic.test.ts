@@ -7,6 +7,7 @@ import { auditHashAssertions, parseProseHashes, parseSumsFile } from "../src/man
 import { findEmptySections, recoverProblem } from "../src/problem.js";
 import { ciIsTheater, extractFromCi, extractFromMarkdown, isPresenceOnly } from "../src/exec.js";
 import { buildGraph } from "../src/graph.js";
+import { unresolvedPlaceholder } from "../src/validation.js";
 import { sha256 } from "../src/fs.js";
 
 async function fixture(files: Record<string, string>): Promise<string> {
@@ -110,7 +111,10 @@ describe("problem recovery", () => {
     const inventory = await buildInventory(root);
     const recovery = await recoverProblem(inventory, loader(root), { network: false });
     expect(recovery.cap.tier).toBe("T2");
-    expect(recovery.cap.resolution_ceiling).toBe("narrowed");
+    // T2 forbids only `closed`. `declared-partial` is not a weaker `narrowed`:
+    // it is an honestly scoped partial result, and an unreachable pin is no
+    // reason to deny it to a repository that earned it.
+    expect(recovery.cap.resolution_ceiling).toBe("declared-partial");
     expect(recovery.cap.scope_coverage_ceiling).toBe(3);
   });
 
@@ -159,6 +163,22 @@ describe("command extraction", () => {
   it("does not call CI theater when it actually runs the verification", () => {
     const ci = extractFromCi(".gitlab-ci.yml", "  script:\n    - test -s SOLUTION.md\n    - python3 -m unittest discover\n");
     expect(ciIsTheater(ci)).toBe(false);
+  });
+});
+
+describe("placeholder detection", () => {
+  it("does not mistake nested LaTeX braces for an unfilled template", () => {
+    expect(unresolvedPlaceholder("gives \\(q^{\\bullet}=O_s(\\varepsilon^{3^{-d-2}})\\) for every fixed")).toBeNull();
+    expect(unresolvedPlaceholder("the state \\(\\rho_{A_{1}}\\) factorises")).toBeNull();
+  });
+
+  it("catches a copied report skeleton", () => {
+    expect(unresolvedPlaceholder("# Solution Assay — <problem id / repo>")).toBe("<problem id / repo>");
+    expect(unresolvedPlaceholder("Decidable coverage: <m>/<n> support edges")).toBe("<m>/<n>");
+  });
+
+  it("catches a genuine mustache placeholder", () => {
+    expect(unresolvedPlaceholder("the claim is {{ claim_text }} here")).toContain("claim_text");
   });
 });
 
