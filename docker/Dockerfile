@@ -14,7 +14,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl git \
         poppler-utils \
-        python3 python3-venv python3-pip \
+        python3 python3-venv python3-pip python-is-python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # opencode —— OSA 与 OSP 共用的 agent runtime
@@ -22,6 +22,10 @@ RUN curl -fsSL https://opencode.ai/install | VERSION="${OPENCODE_VERSION}" bash
 
 # OSP —— pin 到 release，走官方 installer。OSA 的 paper 轴以子进程委派它。
 RUN curl -fsSL "https://raw.githubusercontent.com/a-green-hand-jack/open-scholar-peer/${OSP_REF}/install_cli.sh" | bash
+
+# `python-is-python3` 很关键：仓库文档常写 `python` 而不是 `python3`，
+# 没有这个别名会让复现命令以 exit 127 失败，而那是环境缺陷，
+# 不是交付物缺陷 —— 会被误记成一条开放支撑边。
 
 # 沙箱侧 Python 依赖。清单来自对测试集 164 个 .py 的 import 统计：
 # 标准库已覆盖多数（fractions 32 / unittest 36 / itertools 36 / hashlib 25），
