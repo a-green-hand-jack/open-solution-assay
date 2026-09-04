@@ -37,6 +37,22 @@ export class AssayController {
   private source(): string { return join(this.options.workspace, "source"); }
   private load = (relative: string): Promise<string> => readFile(join(this.source(), relative), "utf8");
 
+  /**
+   * Run only the model-free phases. No OpenCode server is started, so this
+   * path costs nothing and is the one used for offline corpus sweeps.
+   */
+  async runPrepareOnly(): Promise<void> {
+    for (const phase of PHASES) {
+      if (!isDeterministic(phase)) continue;
+      const state = await this.state();
+      if (state.phases[phase]?.status === "completed") continue;
+      await this.runPhase(phase);
+    }
+    const state = await this.state();
+    state.status = "prepared";
+    await this.save(state);
+  }
+
   async run(): Promise<"completed"> {
     const abortController = new AbortController();
     const interrupt = (signal: NodeJS.Signals) => {

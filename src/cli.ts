@@ -24,6 +24,72 @@ async function which(binary: string, args: string[] = ["--version"]): Promise<st
   } catch { return null; }
 }
 
+type AuditOptions = {
+  output: string; headless?: boolean; model?: string; timeout: number;
+  execute: "full" | "python-only" | "static"; execTimeout: number;
+  maxCommands: number; network?: boolean; prepareOnly?: boolean; quiet?: boolean;
+};
+
+type AuditSummary = {
+  runId: string; workspace: string; files: number;
+  tier: string; ceiling: string; closed: number; total: number; findings: number;
+};
+
+/** Shared by `audit` and `batch` so the two cannot drift. */
+async function runAudit(task: string, options: AuditOptions): Promise<AuditSummary> {
+  const imported = await importTask(task, options.output);
+  await installAssets(imported.workspace);
+  const state = RunStateSchema.parse({
+    schema_version: "osa-run-v1",
+    run_id: imported.runId,
+    status: "preparing",
+    task: resolve(task),
+    source_digest: imported.inventory.digest,
+    phases: initialPhases(),
+    current_phase: null,
+    tier_cap: null,
+    paper: { located: null, candidates: [], osp_status: "off", osp_output: null },
+    coverage: null,
+    provenance: { osa_version: VERSION, started_at: now(), execute_policy: options.execute, prepare_only: Boolean(options.prepareOnly) },
+    created_at: now(),
+    updated_at: now(),
+    completed_at: null,
+    report: null,
+  });
+  await writeJsonAtomic(join(imported.workspace, ".osa-run", "run.json"), state);
+
+  if (!options.quiet) {
+    console.log(`run       ${imported.runId}`);
+    console.log(`workspace ${imported.workspace}`);
+    console.log(`files     ${imported.inventory.files.length}  digest ${imported.inventory.digest.slice(0, 16)}`);
+  }
+
+  const controller = new AssayController({
+    workspace: imported.workspace,
+    headless: options.prepareOnly ? true : Boolean(options.headless),
+    model: options.model,
+    timeoutMs: options.timeout,
+    execPolicy: options.execute,
+    execTimeoutMs: options.execTimeout,
+    maxCommands: options.maxCommands,
+    network: Boolean(options.network),
+  });
+
+  if (options.prepareOnly) await controller.runPrepareOnly();
+  else await controller.run();
+
+  const shortfall = await readJson(join(imported.workspace, ".assay", "graph", "shortfall.json")) as {
+    coverage: { closed: number; total: number };
+    tier_cap: { tier: string; resolution_ceiling: string };
+    findings: unknown[];
+  };
+  return {
+    runId: imported.runId, workspace: imported.workspace, files: imported.inventory.files.length,
+    tier: shortfall.tier_cap.tier, ceiling: shortfall.tier_cap.resolution_ceiling,
+    closed: shortfall.coverage.closed, total: shortfall.coverage.total, findings: shortfall.findings.length,
+  };
+}
+
 const program = new Command();
 program.name("osa").description("Open SolutionAssay — audit how far a solution repository actually got").version(VERSION);
 
@@ -40,57 +106,11 @@ program
   .option("--network", "treat the upstream problem pin as fetchable", false)
   .option("--prepare-only", "run the deterministic phases and stop before any model call", false)
   .action(async (task: string, options) => {
-    const imported = await importTask(task, options.output);
-    await installAssets(imported.workspace);
-    const state = RunStateSchema.parse({
-      schema_version: "osa-run-v1",
-      run_id: imported.runId,
-      status: "preparing",
-      task: resolve(task),
-      source_digest: imported.inventory.digest,
-      phases: initialPhases(),
-      current_phase: null,
-      tier_cap: null,
-      paper: { located: null, candidates: [], osp_status: "off", osp_output: null },
-      coverage: null,
-      provenance: { osa_version: VERSION, started_at: now(), execute_policy: options.execute, prepare_only: Boolean(options.prepareOnly) },
-      created_at: now(),
-      updated_at: now(),
-      completed_at: null,
-      report: null,
-    });
-    await writeJsonAtomic(join(imported.workspace, ".osa-run", "run.json"), state);
-
-    console.log(`run       ${imported.runId}`);
-    console.log(`workspace ${imported.workspace}`);
-    console.log(`files     ${imported.inventory.files.length}  digest ${imported.inventory.digest.slice(0, 16)}`);
-
-    if (options.prepareOnly) {
-      // Deterministic phases only: no OpenCode server, no model spend.
-      const controller = new AssayController({
-        workspace: imported.workspace, headless: true, model: options.model,
-        timeoutMs: options.timeout, execPolicy: options.execute,
-        execTimeoutMs: options.execTimeout, maxCommands: options.maxCommands, network: options.network,
-      });
-      await (controller as unknown as { runDeterministicOnly?: () => Promise<void> }).runDeterministicOnly?.();
-      for (const phase of ["intake", "problem", "graph", "execute", "shortfall"] as const) {
-        await (controller as never as { runPhase: (p: string) => Promise<void> }).runPhase(phase);
-        console.log(`  ✓ ${phase}`);
-      }
-      const summary = await readJson(join(imported.workspace, ".assay", "graph", "shortfall.json")) as { coverage: { closed: number; total: number }; tier_cap: { tier: string; resolution_ceiling: string }; findings: unknown[] };
-      console.log(`\ntier      ${summary.tier_cap.tier} → ceiling ${summary.tier_cap.resolution_ceiling}`);
-      console.log(`coverage  ${summary.coverage.closed}/${summary.coverage.total} support edges closed`);
-      console.log(`findings  ${summary.findings.length} mechanically decided`);
-      return;
-    }
-
-    const controller = new AssayController({
-      workspace: imported.workspace, headless: Boolean(options.headless), model: options.model,
-      timeoutMs: options.timeout, execPolicy: options.execute,
-      execTimeoutMs: options.execTimeout, maxCommands: options.maxCommands, network: options.network,
-    });
-    await controller.run();
-    console.log(`\nreport    ${join(imported.workspace, ".assay", "report", "assay.md")}`);
+    const summary = await runAudit(task, options as AuditOptions);
+    console.log(`\ntier      ${summary.tier} → ceiling ${summary.ceiling}`);
+    console.log(`coverage  ${summary.closed}/${summary.total} support edges closed`);
+    console.log(`findings  ${summary.findings} mechanically decided`);
+    if (!options.prepareOnly) console.log(`report    ${join(summary.workspace, ".assay", "report", "assay.md")}`);
   });
 
 program
@@ -137,18 +157,48 @@ program
   .command("batch")
   .argument("<dir>", "directory of solution repositories")
   .option("-o, --output <dir>", "parent directory for runs", "./osa-runs")
-  .option("--prepare-only", "deterministic phases only", false)
+  .option("--prepare-only", "deterministic phases only — offline, no model spend", false)
+  .option("--execute <policy>", "full | python-only | static", "python-only")
+  .option("--exec-timeout <ms>", "per-command execution timeout", (v) => Number(v), 60_000)
+  .option("--max-commands <n>", "cap on executed commands per task", (v) => Number(v), 25)
+  .option("--timeout <ms>", "per-phase model timeout", (v) => Number(v), 1_800_000)
+  .option("-m, --model <model>", "provider/model reference")
+  .option("--summary <path>", "write a corpus summary table here")
   .action(async (dir: string, options) => {
-    const entries = (await readdir(dir, { withFileTypes: true })).filter((entry) => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
-    console.log(`${entries.length} task(s)`);
-    for (const entry of entries) {
-      console.log(`\n──── ${entry.name} ────`);
+    const entries = (await readdir(dir, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    console.log(`${entries.length} task(s) from ${dir}\n`);
+
+    const rows: (AuditSummary & { task: string })[] = [];
+    const failures: { task: string; error: string }[] = [];
+    for (const [index, entry] of entries.entries()) {
+      const label = `[${String(index + 1).padStart(2)}/${entries.length}] ${entry.name}`;
       try {
-        await program.parseAsync(["audit", join(dir, entry.name), "--output", options.output, ...(options.prepareOnly ? ["--prepare-only"] : [])], { from: "user" });
+        const summary = await runAudit(join(dir, entry.name), { ...(options as AuditOptions), quiet: true });
+        rows.push({ ...summary, task: entry.name });
+        console.log(`${label}\n    ${summary.tier} → ${summary.ceiling}  ·  ${summary.closed}/${summary.total} closed  ·  ${summary.findings} findings  ·  ${summary.files} files`);
       } catch (error) {
-        console.log(`  ✗ ${error instanceof Error ? error.message : String(error)}`);
+        const message = error instanceof Error ? error.message : String(error);
+        failures.push({ task: entry.name, error: message });
+        console.log(`${label}\n    FAILED: ${message.slice(0, 160)}`);
       }
     }
+
+    const table = [
+      `| Task | Files | Tier | Ceiling | Coverage | Findings |`,
+      `|---|---:|---|---|---:|---:|`,
+      ...rows.map((row) => `| \`${row.task}\` | ${row.files} | ${row.tier} | ${row.ceiling} | ${row.closed}/${row.total} | ${row.findings} |`),
+    ].join("\n");
+    console.log(`\n${table}`);
+    console.log(`\n${rows.length} succeeded, ${failures.length} failed`);
+    for (const failure of failures) console.log(`  ✗ ${failure.task}: ${failure.error.slice(0, 200)}`);
+    if (options.summary) {
+      const { writeTextAtomic } = await import("./fs.js");
+      await writeTextAtomic(options.summary, `${table}\n\n${failures.map((f) => `- FAILED \`${f.task}\`: ${f.error}`).join("\n")}\n`);
+      console.log(`\nsummary   ${options.summary}`);
+    }
+    process.exitCode = failures.length === 0 ? 0 : 1;
   });
 
 program
