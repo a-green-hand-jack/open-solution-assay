@@ -206,7 +206,7 @@ export class AssayController {
       const commands = await collectCommands(inventory, this.load);
       await writeJsonAtomic(join(graphDir, "manifest.json"), manifest);
       await writeJsonAtomic(join(graphDir, "commands.json"), commands);
-      const graph = buildGraph({ inventory, manifest, problem, commands, execRecords: [] });
+      const graph = buildGraph({ inventory, manifest, problem, commands, execRecords: [], postExecution: false });
       await writeJsonAtomic(join(graphDir, "graph.json"), graph);
       await writeTextAtomic(join(rawDir, "03_graph.md"), [
         `# Evidence graph (pre-execution)`, ``,
@@ -246,7 +246,7 @@ export class AssayController {
       const manifest = await readJson(join(graphDir, "manifest.json")) as Awaited<ReturnType<typeof auditHashAssertions>>;
       const commands = await readJson(join(graphDir, "commands.json")) as Awaited<ReturnType<typeof collectCommands>>;
       const execRecords = await readJson(join(graphDir, "exec.json")) as Awaited<ReturnType<typeof runAll>>;
-      const graph = buildGraph({ inventory, manifest, problem, commands, execRecords });
+      const graph = buildGraph({ inventory, manifest, problem, commands, execRecords, postExecution: true });
       await writeJsonAtomic(join(graphDir, "graph.json"), graph);
       await writeJsonAtomic(join(graphDir, "shortfall.json"), {
         coverage: graph.coverage,

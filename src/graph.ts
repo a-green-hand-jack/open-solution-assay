@@ -65,8 +65,16 @@ export function buildGraph(input: {
   problem: ProblemRecovery;
   commands: CommandCandidate[];
   execRecords: ExecRecord[];
+  /**
+   * False while the graph is being built before the execute phase. Absence of a
+   * successful run is only reportable once execution has actually been
+   * attempted, otherwise the pre-execution graph asserts a failure that the
+   * execute phase then contradicts.
+   */
+  postExecution?: boolean;
 }): EvidenceGraph {
   const { inventory, manifest, problem, commands, execRecords } = input;
+  const postExecution = input.postExecution ?? execRecords.length > 0;
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   const findings: Finding[] = [];
@@ -168,7 +176,7 @@ export function buildGraph(input: {
       evidence: failed.map((record) => `${record.argv} → exit ${record.exitCode}${record.timedOut ? " (timeout)" : ""} [${record.declaredIn}]`),
     });
   }
-  if (execRecords.filter((record) => record.ran && record.exitCode === 0).length === 0) {
+  if (postExecution && execRecords.filter((record) => record.ran && record.exitCode === 0).length === 0) {
     findings.push({
       code: "no-executable-evidence",
       severity: "strong concern",
