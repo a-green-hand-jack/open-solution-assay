@@ -47,3 +47,44 @@ Tier distribution: T0 5 · T2 32 · T3 2 · T4 0.
 
 - FAILED `wangqihang_solution-p1189-qihang__83097646`: execute failed validation: .assay/graph/exec.json:non-empty: 3 bytes
 - FAILED `wangqihang_solution-p1432__ba3ba1e6`: execute failed validation: .assay/graph/exec.json:non-empty: 3 bytes
+
+## Full-pipeline runs (2026-09-04/05)
+
+Seven repositories audited through all eight phases with `openai/gpt-5.6-sol`,
+covering every structural form in the corpus. Deterministic phases were run on
+all 39.
+
+| Task | Form | Tier | Resolution | Coverage |
+|---|---|---|---|---:|
+| `Ch.S_povm-conjecture2` | `audit/`+`paper/`+`problem/`, solution nested in `problem/` | T0 | unverifiable | 0/1 |
+| `p3535` | proper Python package, `manuscript/` not `paper/` | T0 | unsupported | 0/1 |
+| `p559` | standard six-file template | T2 | narrowed | 16/46 |
+| `p1432` | PDF only, no `.tex`, no runnable code | T2 | narrowed | 0/0 |
+| `p2113` | write-up in `research.md` | T2 | **declared-partial** | 4/5 |
+| `lewton` | 151-file unpruned workbench dump | T3 | unverifiable | 0/3 |
+| `kun-agent` | proof split into markdown lemma files, no YAML | T3 | unverifiable | 0/4 |
+
+`p2113` is the anti-false-positive fixture from issue #2: it declares itself
+partial, its own rubric permits partial, and its verification runs. It now
+receives `declared-partial` with `independently-checked` support and passes all
+21 export-gate checks.
+
+### Judgment-layer variance
+
+Two runs over byte-identical deterministic facts (coverage 2/5, the same five
+execution outcomes) disagreed on the support axis — `independently-checked`
+versus `unreplayable` — which flipped the headline verdict between `narrowed`
+and `unverifiable`. The deterministic layer is reproducible; the judgment layer
+is not, and the variance is large enough to change the verdict.
+
+The third run reached `declared-partial` because the facts improved (4/5 after
+the `python` alias fix), not because the model was steadier.
+
+### Dimensions that are not discriminating
+
+Across the seven reports, `argument-support` scored 3 six times and
+`evidence-independence` scored 4 five times. The latter is structural: band 4
+describes what OSA did ("ran the author's artifacts under your own harness with
+inputs you generated"), and OSA always does that, so the dimension measures
+OSA's effort rather than a property of the deliverable. Both anchor sets need
+rewriting.
