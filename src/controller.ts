@@ -215,6 +215,7 @@ export class AssayController {
         `Tier: **${recovery.cap.tier}** — ${recovery.cap.rationale}`,
         `Resolution ceiling: **${recovery.cap.resolution_ceiling}**   scope-coverage ceiling: **${recovery.cap.scope_coverage_ceiling}**`, ``,
         `First-party statement: ${recovery.statementPath ? `\`${recovery.statementPath}\`` : "none in the deliverable"}`,
+        `Problem candidates: ${recovery.candidates.length ? recovery.candidates.map((c) => `\`${c.file}\` (${c.reason})`).join(", ") : "none detected"}`,
         `Pin: ${recovery.pin ? `project ${recovery.pin.project ?? "?"} @ ${recovery.pin.sha ?? "?"} (declared in \`${recovery.pin.declaredIn}\`)` : "none"}`,
         `Rubric: ${recovery.rubricPath ? `\`${recovery.rubricPath}\`` : "none — criteria must be derived from the problem statement"}`, ``,
         `## Empty declared sections`, ``,

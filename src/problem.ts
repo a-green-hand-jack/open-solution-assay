@@ -12,6 +12,7 @@ export type ProblemRecovery = {
   /** Shipped acceptance criteria, which are this problem's own bar. */
   rubricPath: string | null;
   rubricHeadings: string[];
+  candidates: { file: string; reason: string }[];
   /** Level-two/three sections present but empty — an empty "Open Questions" is a finding. */
   emptySections: { file: string; heading: string }[];
 };
@@ -21,7 +22,10 @@ const STATEMENT_PATTERNS: readonly RegExp[] = [
   /^problem\/contract\.md$/i,
   /^problem\/.*\.md$/i,
   /^PROBLEM\.md$/i,
+  /(^|\/)(question|task|challenge|prompt|specification|contract)\.(md|txt|tex)$/i,
 ];
+
+const SELF_CONTAINED_PROBLEM_HEADINGS = /^(#{1,3})\s+(the problem|problem statement|question|task|challenge|specification|objective)\s*$/im;
 
 const CEILINGS: Record<TierCap["tier"], Pick<TierCap, "resolution_ceiling" | "scope_coverage_ceiling">> = {
   T0: { resolution_ceiling: "closed", scope_coverage_ceiling: 5 },
@@ -75,6 +79,16 @@ export async function recoverProblem(
     if (hit) { statementPath = hit.path; break; }
   }
 
+  // A flexible repo often puts the problem in a README or an otherwise
+  // generically named document. Treat an explicit problem section as a
+  // first-party statement, while keeping a bare README at the weaker T3 tier.
+  if (!statementPath) {
+    for (const file of inventory.files.filter((f) => /\.(md|txt|tex)$/i.test(f.path) && !f.selfVerdict && f.bytes < 1_000_000)) {
+      const content = await load(file.path).catch(() => "");
+      if (SELF_CONTAINED_PROBLEM_HEADINGS.test(content)) { statementPath = file.path; break; }
+    }
+  }
+
   let pin: ProblemRecovery["pin"] = null;
   for (const file of inventory.files.filter((f) => /\.(ya?ml)$/i.test(f.path))) {
     const parsed = parsePin(await load(file.path).catch(() => ""), file.path);
@@ -85,6 +99,7 @@ export async function recoverProblem(
   const emptySections: ProblemRecovery["emptySections"] = [];
   let rubricPath: string | null = null;
   let rubricHeadings: string[] = [];
+  const candidates: ProblemRecovery["candidates"] = [];
 
   for (const file of inventory.files.filter((f) => /\.md$/i.test(f.path) && f.bytes < 1_000_000)) {
     const content = await load(file.path).catch(() => "");
@@ -97,6 +112,16 @@ export async function recoverProblem(
     if (!rubricPath && (/evaluation-rubric\.md$/i.test(file.path) || /^##\s+Acceptance criteria\s*$/im.test(content))) {
       rubricPath = file.path;
       rubricHeadings = [...content.matchAll(/^(#{1,3})\s+(.+?)\s*$/gm)].map((m) => `${m[1]} ${m[2]}`);
+    }
+  }
+
+  for (const file of inventory.files.filter((f) => !f.selfVerdict && f.bytes < 1_000_000 && /\.(md|txt|tex|rst|adoc)$/i.test(f.path))) {
+    const content = await load(file.path).catch(() => "");
+    if (!content) continue;
+    if (file.path === statementPath) candidates.push({ file: file.path, reason: "explicit problem statement path" });
+    else if (SELF_CONTAINED_PROBLEM_HEADINGS.test(content)) candidates.push({ file: file.path, reason: "explicit problem section" });
+    else if (/\b(problem|question|task|objective|assum(?:e|ption)|given|prove|show that|determine)\b/i.test(content)) {
+      candidates.push({ file: file.path, reason: "problem-language signal; inspect context" });
     }
   }
 
@@ -120,6 +145,6 @@ export async function recoverProblem(
 
   return {
     cap: { tier, ...CEILINGS[tier], rationale },
-    statementPath, pin, references, rubricPath, rubricHeadings, emptySections,
+    statementPath, pin, references, rubricPath, rubricHeadings, candidates, emptySections,
   };
 }
