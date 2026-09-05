@@ -30,7 +30,10 @@ export async function importTask(taskPath: string, outputDir: string): Promise<I
   const source = join(workspace, "source");
 
   await mkdir(workspace, { recursive: true });
-  await cp(task, source, { recursive: true, dereference: false });
+  // Snapshot datasets commonly represent files as symlinks into a blob store.
+  // Materialize them inside the isolated workspace so inventory and execution
+  // see the actual files even when the source mount does not expose its store.
+  await cp(task, source, { recursive: true, dereference: true });
   for (const name of STRIP) await rm(join(source, name), { recursive: true, force: true });
 
   const inventory = await buildInventory(source);
