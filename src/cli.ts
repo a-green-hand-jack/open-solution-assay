@@ -214,7 +214,6 @@ program
       ["node", process.version],
       ["osa", VERSION],
       ["opencode", await which("opencode")],
-      ["osp", await which("osp")],
       ["git", await which("git")],
       ["python3", await which("python3", ["-V"])],
       ["pdftotext", await which("pdftotext", ["-v"])],

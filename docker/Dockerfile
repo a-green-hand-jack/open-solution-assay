@@ -1,16 +1,13 @@
-# OSA (Open SolutionAssay) + OSP (Open ScholarPeer) 统一运行时
-# 见 issue #3。宿主机状态与本镜像无关：所有版本在此 pin 死。
+# OSA 开发运行时。宿主机状态与本镜像无关：运行时版本在此 pin 死。
 FROM node:22-bookworm-slim
 
 # 版本 pin —— 改这里，不要改宿主机
 ARG OPENCODE_VERSION=1.18.27
-ARG OSP_REF=v2.2.0
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH="/root/.opencode/bin:/root/.local/bin:${PATH}"
 
-# 系统依赖。poppler-utils 提供 pdftotext/pdfinfo —— OSP 硬依赖，osp doctor 会检查。
-# python3-venv + ensurepip 是 OSP 每次 run 自建 MCP venv 所必需。
+# 系统依赖。OSA 只在被审 repo 明确提供可执行证据时使用这些工具。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl git \
         poppler-utils \
@@ -19,9 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # opencode —— OSA 与 OSP 共用的 agent runtime
 RUN curl -fsSL https://opencode.ai/install | VERSION="${OPENCODE_VERSION}" bash
-
-# OSP —— pin 到 release，走官方 installer。OSA 的 paper 轴以子进程委派它。
-RUN curl -fsSL "https://raw.githubusercontent.com/a-green-hand-jack/open-scholar-peer/${OSP_REF}/install_cli.sh" | bash
 
 # `python-is-python3` 很关键：仓库文档常写 `python` 而不是 `python3`，
 # 没有这个别名会让复现命令以 exit 127 失败，而那是环境缺陷，
@@ -35,7 +29,7 @@ RUN pip3 install --no-cache-dir --break-system-packages \
         numpy scipy "networkx==3.6.1" pytest sympy
 
 # OSA 本体：TS CLI，从源码构建并全局安装为 `osa`。
-# dev loop 下 bind-mount /src/osa 覆盖源码后由 entrypoint 增量重建。
+# dev loop 下 bind-mount /src/osa，entrypoint 会构建并运行当前源码。
 WORKDIR /opt/osa
 COPY package.json tsconfig.json ./
 RUN npm install --ignore-scripts

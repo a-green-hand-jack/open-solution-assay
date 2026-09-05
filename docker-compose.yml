@@ -1,0 +1,13 @@
+services:
+  osa-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    volumes:
+      - .:/src/osa
+      - ./tasks:/data/tasks:ro
+      - ./runs:/runs
+    entrypoint: ["/usr/local/bin/osa-entrypoint"]
+    working_dir: /src/osa
+    environment:
+      OSA_MODEL: ${OSA_MODEL:-openai/gpt-5.6-sol}

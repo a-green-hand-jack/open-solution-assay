@@ -46,11 +46,19 @@ docker run --rm -it \
 
 Docker 入口会构建绑定的 `/src/osa`，然后调用与本地相同的 OSA CLI。
 
+也可以使用 Compose 直接模拟安装后的用户行为：
+
+```bash
+docker compose run --rm osa-dev /data/tasks/example --prepare-only
+```
+
+输入从 `./tasks` 只读挂载，运行结果写入 `./runs`。修改 `src/` 或 `prompts/`
+后重新执行即可验证当前工作树。
+
 开发者验证基础设施：
 
 ```bash
 npm run typecheck
-npm test
 npm run build
 bash -n install.sh docker/entrypoint.sh
 ```
