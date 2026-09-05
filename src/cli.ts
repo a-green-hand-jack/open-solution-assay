@@ -231,6 +231,14 @@ program
     process.exitCode = ok ? 0 : 1;
   });
 
+// The user-facing form is `osa <solution-repo>`. Keep `audit` as an explicit
+// form for scripts and make the two forms share exactly the same controller.
+const userArgs = process.argv.slice(2);
+const commands = new Set(["audit", "status", "validate", "gate", "batch", "clean", "doctor", "help"]);
+if (userArgs[0] && !userArgs[0].startsWith("-") && !commands.has(userArgs[0])) {
+  process.argv.splice(2, userArgs.length, "audit", ...userArgs);
+}
+
 program.parseAsync(process.argv).catch((error: unknown) => {
   console.error(`osa: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
