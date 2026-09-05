@@ -1,4 +1,4 @@
-# OSA 开发运行时。宿主机状态与本镜像无关：运行时版本在此 pin 死。
+# OSA 用户模拟开发运行时。宿主机源码和 OpenCode identity 通过 Compose 挂载。
 FROM node:22-bookworm-slim
 
 # 版本 pin —— 改这里，不要改宿主机

@@ -46,7 +46,9 @@ docker run --rm -it \
 
 Docker 入口会构建绑定的 `/src/osa`，然后调用与本地相同的 OSA CLI。
 
-也可以使用 Compose 直接模拟安装后的用户行为：
+也可以使用 Compose 直接模拟安装后的用户行为。Compose 默认联网，并以只读方式
+挂载开发者的 OpenCode 配置和运行状态；配置只读，运行状态允许写入日志和 session。
+不要把这个配置挂载方式用于不可信的容器：
 
 ```bash
 docker compose run --rm osa-dev /data/tasks/example --prepare-only

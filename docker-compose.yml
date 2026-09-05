@@ -7,6 +7,11 @@ services:
       - .:/src/osa
       - ./tasks:/data/tasks:ro
       - ./runs:/runs
+      # Reuse the developer's normal OpenCode identity/configuration so this
+      # container exercises the same provider and model path as the user CLI.
+      - ${HOME}/.config/opencode:/root/.config/opencode:ro
+      # OpenCode writes logs/session state here during a normal user run.
+      - ${HOME}/.local/share/opencode:/root/.local/share/opencode
     entrypoint: ["/usr/local/bin/osa-entrypoint"]
     working_dir: /src/osa
     environment:

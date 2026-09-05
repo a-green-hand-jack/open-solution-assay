@@ -30,8 +30,11 @@ export async function installAssets(workspace: string): Promise<void> {
     bash: "allow",
     external_directory: "deny",
     question: "deny",
-    webfetch: "deny",
-    websearch: "deny",
+    // The development container intentionally mirrors a normal connected
+    // OpenCode installation. Network access remains a user-visible choice in
+    // the audit prompt, while external filesystem access stays isolated.
+    webfetch: "allow",
+    websearch: "allow",
   } as const;
 
   await writeJsonAtomic(join(workspace, "opencode.json"), {
