@@ -37,7 +37,7 @@ run_one() {
   rm -f "$before" "$after"
 }
 
-export DATASET_CACHE REVISION RESULTS LOG_DIR
+export DATASET_CACHE REVISION SNAPSHOT_DIR RESULTS LOG_DIR
 export -f run_one
 
 tasks=()
