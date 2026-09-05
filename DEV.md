@@ -2,6 +2,32 @@
 
 本文说明如何构建 OSA 的 Docker 开发环境，以及如何在隔离容器中模拟用户使用 OSA，对真实 solution repo 运行完整 agent E2E。
 
+## OSA 行为与代码映射
+
+修改不同文件会改变不同层面的行为：
+
+| 文件 | 影响的行为 |
+|---|---|
+| `src/cli.ts` | 用户命令、参数、默认值、exit code、状态和报告路径 |
+| `src/controller.ts` | phase 顺序、OpenCode session 生命周期、失败/中断恢复和模型调用时机 |
+| `src/input.ts` | 输入目录校验、复制、符号链接处理、缓存剔除和 source 只读冻结 |
+| `src/inventory.ts` | 文件发现、hash、self-verdict、第三方内容和 shadow copy 分类 |
+| `src/problem.ts` | 问题陈述、问题候选、外部 pin、rubric 和 resolution ceiling |
+| `src/exec.ts` | reproduction 命令发现、执行策略、timeout、命令上限和执行记录 |
+| `src/graph.ts` | claim/evidence 支撑关系、coverage 和机械 findings |
+| `src/validation.ts` | phase artifact、最终报告结构、resolution、coverage 和 export gate |
+| `src/assets.ts` | OpenCode permission、OSA agent 配置和 prompt 安装 |
+| `src/phases.ts` | phase 协议、输出 artifact、报告章节和结论枚举 |
+| `prompts/osa-audit.md` | agent 如何理解问题、solution、claim、证据、交叉检查和报告 |
+| `docker/Dockerfile` | 容器中的 Node、OpenCode、Python、系统工具和依赖版本 |
+| `docker/entrypoint.sh` | Docker 参数转发、当前源码构建和容器默认行为 |
+| `docker-compose.yml` | 源码、输入、输出、OpenCode 配置、runtime 状态和网络挂载 |
+| `install.sh` | 用户安装、构建和 CLI 链接方式 |
+| `README.md` | 用户安装、使用和结果说明 |
+| `DEV.md` | 开发者运行和评测说明 |
+
+优先修改正确的层：运行安全问题改 TypeScript runtime，agent 判断问题改 prompt/workflow，环境问题改 Docker，用户命令问题改 CLI。不要为了修复 agent 判断而继续堆叠固定文件名 parser。
+
 ## 前置条件
 
 - Docker Engine 和 Docker Compose v2；
@@ -128,7 +154,7 @@ bash -n install.sh docker/entrypoint.sh
 docker compose config
 ```
 
-然后运行一个真实 solution 的 `--prepare-only` 和完整 agent E2E。E2E 重点检查：
+然后运行一个真实 solution 的 `--prepare-only` 和完整 agent E2E。完整 E2E 不是只检查 CLI 退出码，而是确认 OSA agent 确实被调用并完成 judgment phases。重点检查：
 
 - 所有 phase 是否完成；
 - `.assay/report/assay.md` 是否存在；
@@ -136,6 +162,17 @@ docker compose config
 - shortfall 和 verification agenda 是否具体；
 - source 是否没有被修改；
 - Docker 和本地 CLI 是否使用同一套核心流程。
+
+确认 agent 被真实调用的方法：
+
+1. 不使用 `--prepare-only`；
+2. 日志中应出现 `claims (model)`、`crosscheck (model)` 和 `report (model)`；
+3. `.osa-run/run.json` 中这三个 phase 的状态应为 `completed`；
+4. `.assay/raw/02_claims.md`、`.assay/raw/05_crosscheck.md` 和 `.assay/report/assay.md` 应存在；
+5. `.assay/report/assay.md` 必须包含 Resolution、Claims and typing、What OSA established、Shortfall 和 What was not checked；
+6. 报告中的结论必须引用输入文件、执行记录或 OSA 生成的验证结果，而不是只复述作者 verdict。
+
+完整 E2E 的成功条件是“得到可读、可追踪的审核文档”，不是“solution 被判定为正确”。`unsupported`、`unverifiable` 或 `contradicted` 都可能是正确的审核结果。
 
 ## 常见问题
 

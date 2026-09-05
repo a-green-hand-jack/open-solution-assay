@@ -1,134 +1,117 @@
-# Gewu Solution Audits
+# Open SolutionAssay（OSA）
 
-## 使用 OSA
+OSA 是一个基于 OpenCode 的 solution 审核 agent。它接收一个任意形式的 solution repo，恢复其中要解决的问题，理解 solution 的声明和证据，并判断这个 solution 是否真正解决了问题。
 
-OSA 接受任意非空 solution repository。输入可以是 Git repository，也可以是
-普通文件夹；不要求固定文件名或目录结构。输入目录应同时包含待解决的问题、
-solution 以及可提供的证明、实验、证书或验证代码。
+solution repo 可以是 Git 仓库，也可以是普通文件夹；不要求固定文件名、目录结构、YAML 元数据或特定编程语言。问题和 solution 应该一起放在输入目录中。
 
-在源码目录安装开发版本：
+## 用户安装
 
-```bash
-./install.sh
-```
-
-审查一个 solution：
+用户不需要 clone 本仓库，也不需要安装本仓库的 Node.js 依赖。发布版本提供独立安装脚本：
 
 ```bash
-osa ./path/to/solution-repo
+curl -fsSL https://raw.githubusercontent.com/a-green-hand-jack/open-solution-assay/main/install.sh | bash
 ```
 
-等价的脚本形式是：
+安装脚本会安装 OSA 命令及其运行所需的 OpenCode 运行时。安装完成后检查环境：
 
 ```bash
-osa audit ./path/to/solution-repo
+osa doctor
 ```
 
-OSA 会复制并冻结输入，不会修改原始目录。报告写入 timestamped run 下的
-`.assay/report/assay.md`。不调用模型、只运行确定性阶段时使用：
+如果当前项目尚未发布远程安装脚本，也可以在开发者工作树中执行 `./install.sh` 安装开发版本；这不是普通用户的推荐方式。
+
+## 审核一个 solution repo
+
+直接把路径交给 OSA：
 
 ```bash
-osa ./path/to/solution-repo --prepare-only
+osa /path/to/solution-repo
 ```
 
-## 开发与验证
-
-Docker 是开发运行时，不是另一套 OSA 实现：
+等价的显式形式：
 
 ```bash
-docker build -f docker/Dockerfile -t osa-dev .
-docker run --rm -it \
-  -v "$PWD:/src/osa" \
-  -v "$PWD/tasks:/data/tasks:ro" \
-  -v "$PWD/runs:/runs" \
-  osa-dev /data/tasks/example --prepare-only
+osa audit /path/to/solution-repo
 ```
 
-Docker 入口会构建绑定的 `/src/osa`，然后调用与本地相同的 OSA CLI。
+OSA 不会修改原始 solution repo。它会在独立的 run workspace 中复制、记录和冻结输入，并把最终审核文档写入：
 
-也可以使用 Compose 直接模拟安装后的用户行为。Compose 默认联网，并以只读方式
-挂载开发者的 OpenCode 配置和运行状态；配置只读，运行状态允许写入日志和 session。
-不要把这个配置挂载方式用于不可信的容器：
+```text
+osa-runs/<run-id>/.assay/report/assay.md
+```
+
+命令结束时，终端会打印完整的 `report` 路径。你可以直接用编辑器打开它：
 
 ```bash
-docker compose run --rm osa-dev /data/tasks/example --prepare-only
+$EDITOR osa-runs/<run-id>/.assay/report/assay.md
 ```
 
-输入从 `./tasks` 只读挂载，运行结果写入 `./runs`。修改 `src/` 或 `prompts/`
-后重新执行即可验证当前工作树。
-
-开发者验证基础设施：
+如果忘记了 run 路径，可以列出所有最终审核文档：
 
 ```bash
-npm run typecheck
-npm run build
-bash -n install.sh docker/entrypoint.sh
+find osa-runs -path '*/.assay/report/assay.md' -type f -print
 ```
 
-Central repository for auditing **accepted solution repositories** harvested
-from the Gewu Lab problem journal (`git.gewu-lab.ai`).
+每个报告都是独立的 Markdown 文档；最先阅读 `## Resolution`，然后阅读
+`## Problem recovered`、`## What OSA established`、`## Shortfall`、
+`## Verification agenda` 和 `## What was not checked`。
 
-The audit target is the private HF snapshot dataset
-[`Jack-Jieke-Wu/Gewu-Solutions`](https://huggingface.co/datasets/Jack-Jieke-Wu/Gewu-Solutions)
-(39 solution directories, harvested 2026-09-03, covering
-`journal-mathematics-a` and `journal-physics-a`). This repository holds the
-audit *process* — checklists, review-report templates, per-solution reviews,
-and aggregate summaries. Source repositories and data are not vendored here;
-the dataset is the single source of truth.
+最终文档会说明：
 
-## Audit process
+- OSA 恢复出的原始问题；
+- solution 声称完成的内容；
+- 问题要求和 solution 声明的对应关系；
+- 实际执行过的验证；
+- 独立交叉检查结果；
+- 已建立的支持和没有建立的支持；
+- solution 是否完整解决、部分解决、无法验证或被反驳；
+- 具体 shortfall；
+- 需要人类专家继续检查的内容。
 
-Each solution is audited in 8 steps:
+## 常用选项
 
-1. **Binding audit** — directory name, `solution.yaml`
-   (`problem_project_id` / `problem_sha`), README `### Problem References`,
-   and the source commit on `git.gewu-lab.ai` must agree; verify
-   `artifacts/SHA256SUMS-*` where present.
-2. **Rubric + claims** — read `docs/evaluation-rubric.md` (the acceptance
-   criteria) and extract the core claim + scope from the README.
-3. **Completeness** — standard six-file template
-   (README `SOLUTION.md` `problem.yaml` `solution.yaml` `VALIDATION.md`
-   `WORKLOG.md`) plus `docs/` `paper/` `artifacts/`; record deviations.
-4. **Mathematical / physical correctness** — line-by-line review of
-   `SOLUTION.md` (definitions, quantifiers, inferences, conclusions);
-   for witnesses/counterexamples, substitute every object into the premises
-   and verify the claimed property exactly.
-5. **Reproducibility** — execute the Reproduction column of `VALIDATION.md`
-   and compare Expected vs Observed. Floating-point evidence alone is not
-   terminal; exact arithmetic / combinatorial certificates /
-   independently replayable checks are required.
-6. **Independent cross-check** — do not rely on author-written scripts
-   verifying author-written certificates. Pin hashes, re-derive, and run
-   adversarial checks (boundary values, degenerate cases, minimal
-   counterexample search, finite→universal transitions).
-7. **Boundary & paper consistency** — claims must not exceed stated
-   assumptions ("Open Questions" reflects real gaps); `paper.pdf` must agree
-   with `SOLUTION.md`.
-8. **Report** — one report per solution (see `templates/`) plus an aggregate
-   39-row summary table under `reports/`.
+只执行不需要模型的阶段：
 
-Constraint that applies to every step: the independent checker validates
-the supplied certificate; it does **not** replace human (or independent
-agent) mathematical review of the proof narrative.
-
-## Structural groups (from the 2026-09-03 snapshot)
-
-| Group | Meaning | Dirs | Audit emphasis |
-|---|---|---|---|
-| A | standard template (full six-file set) | 24 | full 8-step flow |
-| B1 | template minus `problem.yaml` (mapping-cone batch: p1014, p19795, p305, p308, p314, p324, p331, p340, p341) | 9 | binding via README refs + reverse lookup; batch review |
-| B3 | canonical YAMLs, no SOLUTION/VALIDATION/WORKLOG (p2113) | 1 | correctness from `experiments/` + write-up |
-| B4 | no YAML metadata: Ch.S ×2, kun-agent p17208, p3535 | 4 | audit via each repo's own `problem/` `proof/` `verification/` `audit/` `manuscript/` structure |
-| B2 | raw workbench dump (lewton-agent kerrDeflection) | 1 | paper `.tex`/`.pdf` as primary object; independently build the claim list |
-
-## Repository layout
-
-```
-templates/          review-report template + audit checklist
-reports/            per-solution review reports + aggregate summary table
+```bash
+osa /path/to/solution-repo --prepare-only
 ```
 
-## Status
+限制验证命令：
 
-Initialized. Audit run order proposed: B1 (batch, isomorphic) → Group A
-focused papers → B4/B2 (special cases).
+```bash
+osa /path/to/solution-repo \
+  --execute python-only \
+  --exec-timeout 120000 \
+  --max-commands 40
+```
+
+查看运行状态、重新校验或单独执行最终报告 gate：
+
+```bash
+osa status <run-workspace>
+osa validate <run-workspace>
+osa gate <run-workspace>
+```
+
+## 审核结果
+
+OSA 不只输出 PASS/FAIL。Resolution 可能是：
+
+```text
+closed
+declared-partial
+narrowed
+unsupported
+unverifiable
+contradicted
+misaligned
+unauditable
+```
+
+OSA 会把“solution 声称覆盖的范围”和“证据实际支持的范围”分开报告。没有发现反例不等于证明正确；无法机械闭合的证明步骤会列入人工验证清单。
+
+## 开发者入口
+
+Docker 是开发者用来模拟用户运行 OSA 的隔离环境。开发、构建、完整 agent E2E、文件修改影响和排错方法见 [`DEV.md`](DEV.md)。
+
+本仓库保存 OSA 的源码、agent prompt、Docker 开发环境和审核协议，不保存大型 solution 数据集。真实评测 corpus 使用 Hugging Face 数据集 [`Jack-Jieke-Wu/Gewu-Solutions`](https://huggingface.co/datasets/Jack-Jieke-Wu/Gewu-Solutions)。
