@@ -7,3 +7,10 @@ __pycache__/
 
 # HF download metadata
 .cache/huggingface/
+# OSA run output
+runs/
+
+# Build output / deps
+node_modules/
+dist/
+osa-runs/

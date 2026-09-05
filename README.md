@@ -1,5 +1,70 @@
 # Gewu Solution Audits
 
+## 使用 OSA
+
+OSA 接受任意非空 solution repository。输入可以是 Git repository，也可以是
+普通文件夹；不要求固定文件名或目录结构。输入目录应同时包含待解决的问题、
+solution 以及可提供的证明、实验、证书或验证代码。
+
+在源码目录安装开发版本：
+
+```bash
+./install.sh
+```
+
+审查一个 solution：
+
+```bash
+osa ./path/to/solution-repo
+```
+
+等价的脚本形式是：
+
+```bash
+osa audit ./path/to/solution-repo
+```
+
+OSA 会复制并冻结输入，不会修改原始目录。报告写入 timestamped run 下的
+`.assay/report/assay.md`。不调用模型、只运行确定性阶段时使用：
+
+```bash
+osa ./path/to/solution-repo --prepare-only
+```
+
+## 开发与验证
+
+Docker 是开发运行时，不是另一套 OSA 实现：
+
+```bash
+docker build -f docker/Dockerfile -t osa-dev .
+docker run --rm -it \
+  -v "$PWD:/src/osa" \
+  -v "$PWD/tasks:/data/tasks:ro" \
+  -v "$PWD/runs:/runs" \
+  osa-dev /data/tasks/example --prepare-only
+```
+
+Docker 入口会构建绑定的 `/src/osa`，然后调用与本地相同的 OSA CLI。
+
+也可以使用 Compose 直接模拟安装后的用户行为。Compose 默认联网，并以只读方式
+挂载开发者的 OpenCode 配置和运行状态；配置只读，运行状态允许写入日志和 session。
+不要把这个配置挂载方式用于不可信的容器：
+
+```bash
+docker compose run --rm osa-dev /data/tasks/example --prepare-only
+```
+
+输入从 `./tasks` 只读挂载，运行结果写入 `./runs`。修改 `src/` 或 `prompts/`
+后重新执行即可验证当前工作树。
+
+开发者验证基础设施：
+
+```bash
+npm run typecheck
+npm run build
+bash -n install.sh docker/entrypoint.sh
+```
+
 Central repository for auditing **accepted solution repositories** harvested
 from the Gewu Lab problem journal (`git.gewu-lab.ai`).
 
