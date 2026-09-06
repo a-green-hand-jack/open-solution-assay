@@ -31,6 +31,15 @@ function looksRunnable(argv: string): boolean {
   return SHELL_HINT.test(argv.trim()) && argv.length < 600;
 }
 
+/** Normalize Markdown's visual line continuations before invoking bash. */
+export function normalizeCommand(argv: string): string {
+  return argv
+    .replace(/\\\r?\n/g, " ")
+    .replace(/\\\s*$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
  * Extract commands from markdown. Reproduction instructions are frequently
  * backticked shell inside table cells rather than fenced blocks, so cells are
@@ -48,7 +57,7 @@ export function extractFromMarkdown(declaredIn: string, content: string): Comman
     if (/^\s*```/.test(line)) {
       if (inFence) {
         for (const candidate of fence) {
-          const trimmed = candidate.trim();
+           const trimmed = normalizeCommand(candidate.trim());
           if (trimmed && !trimmed.startsWith("#") && looksRunnable(trimmed)) {
             out.push({ argv: trimmed, declaredIn, origin: "fenced-block", expected: null });
           }
@@ -68,7 +77,7 @@ export function extractFromMarkdown(declaredIn: string, content: string): Comman
       const expected = expectedIndex >= 0 ? cells[expectedIndex] ?? null : null;
       for (const cell of cells) {
         for (const match of cell.matchAll(/`([^`]{4,400})`/g)) {
-          const argv = match[1]!.trim();
+           const argv = normalizeCommand(match[1]!.trim());
           if (looksRunnable(argv)) out.push({ argv, declaredIn, origin: "validation-table", expected });
         }
       }
@@ -85,7 +94,7 @@ export function extractFromCi(declaredIn: string, content: string): CommandCandi
   for (const line of content.split("\n")) {
     const match = /^\s*-\s+(.*\S)\s*$/.exec(line);
     if (!match) continue;
-    const argv = match[1]!.replace(/^["']|["']$/g, "");
+    const argv = normalizeCommand(match[1]!.replace(/^["']|["']$/g, ""));
     if (PRESENCE_ONLY.test(argv) || looksRunnable(argv)) {
       out.push({ argv, declaredIn, origin: "ci", expected: null });
     }
